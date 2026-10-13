@@ -1,0 +1,42 @@
+#day,MONDAY | 12 OCT
+#note,"Sir Haris is not available  •  Assignment collection in B1, G2"
+Type,Time,Section,Subject,Teacher,Room,Note
+Break,12:40-2:15,,,,,"Zuhr Break — Jamat 12:40 PM, Prayer Room"
+Class,2:15-3:10,A7,B,ZA,R1,
+Class,2:15-3:10,B2,CS,HZ,R3,
+Class,2:15-3:10,A7,M,ZK,R4,
+Class,2:15-3:10,B1,P,ZAB,R5,
+Class,2:15-3:10,B3,C,HM,R6,
+Class,3:10-4:05,B1,B,ZA,R1,
+Class,3:10-4:05,A6,P,ZAB,R2,
+Class,3:10-4:05,B2,P,MAI,R3,
+Class,3:10-4:05,B1,M,ZK,R5,
+Class,3:10-4:05,B3,E,FS,R6,
+Class,2:50-4:20,A7,C,,R4,Grand Test
+Class,4:05-5:00,A6,M,ZAB,R2,
+Class,4:05-5:00,B2,M,ZK,R3,
+Class,4:05-5:00,A7,P,MAI,R4,
+Class,4:05-5:00,B1,C,,R5,Test
+Class,4:05-5:00,B3,E,FS,R6,Extra
+Class,4:10-5:40,A1,C,,R1,Grand Test
+Break,5:00-5:40,,,,,"Asr Break — Jamat 5:20 PM, Terrace Area"
+Class,5:40-6:40,XG2,P,MAI,R1,
+Class,5:40-6:40,G1,P,ZAB,R2,
+Class,5:40-6:40,G5,CS,HZ,R3,
+Class,5:40-6:40,G2,B,ZA,R5,
+Class,5:50-6:40,A1+A3,M,ZK,R4,
+Class,5:40-7:10,A2,C,,R6,Grand Test
+Break,6:40-7:00,,,,,"Maghrib Break — Jamat 6:45 PM, Staff Room"
+Class,7:00-8:00,XG2,M,AR,R1,
+Class,7:00-8:00,G1,CS,HZ,R2,
+Class,7:00-8:00,G5,M,ZK,R3,
+Class,7:00-8:00,A1+A3,P,MAI,R4,
+Class,7:00-8:00,G2,C,,R5,Test
+Class,7:00-8:00,A2,P,ZAB,R6,
+Class,8:00-9:00,XG2,C,,R1,Test
+Class,8:00-9:00,G1,M,ZK,R2,
+Class,8:00-9:00,G5,P,MAI,R3,
+Class,8:00-9:00,A3,CS,HZ,R4,
+Class,8:00-9:00,G2,P,ZAB,R5,
+Class,8:00-9:00,A2,B,ZA,R6,
+Break,9:00-9:30,,,,,"Isha Break — Jamat: Staff 8:35 PM, Teacher 9:05 PM, Terrace Area"

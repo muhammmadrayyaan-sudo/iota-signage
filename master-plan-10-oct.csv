@@ -1,0 +1,36 @@
+#day,SATURDAY | 10 OCT
+#note,Sir Jawed is not available
+Type,Time,Section,Subject,Teacher,Room,Note
+Class,12:30-2:15,G5,M,ZK,R1,Extra
+Break,12:40-2:15,,,,,Zuhr Break — Jamat 12:40 PM - Prayer Room
+Class,2:15-3:10,B2,E,AI,R2,
+Class,2:15-3:15,XG2,M,AR,R3,Recovery
+Class,2:15-3:10,B1,U/I,MS,R4,
+Class,2:15-3:10,B3,M,ZAB,R6,
+Class,3:15-4:15,G5,P,MAI,Prayer Room,Extra
+Class,3:15-4:15,G4,C,SH,R1,
+Class,3:10-4:05,B2,U/I,MS,R2,
+Class,3:10-4:05,B1,E,AI,R4,
+Class,3:15-4:15,G2,E,AA,R5,
+Class,3:10-4:05,B3,P,ZAB,R6,
+Class,4:15-5:15,G4,P,MAI,R1,
+Class,4:15-5:15,IXG2,C,SH,R2,
+Class,4:15-5:15,G1,E,AA,R3,
+Class,4:15-5:15,G3,P,ZAB,R4,
+Class,4:05-5:00,B3,CS,ZD,R6,
+Break,5:15-5:40,,,,,Asr Break — Jamat 5:20 PM - Terrace Area
+Class,5:40-6:40,G4,B,ZA,R1,
+Class,5:40-6:40,IXG2,P,MAI,R2,
+Class,5:40-6:40,IXG1,M,SK,R3,
+Class,5:40-6:40,G3,C,SH,R4,
+Class,5:40-6:40,G3,CS,ZD,R5,
+Class,5:40-6:40,XG1,M,HK,R6,
+Break,6:40-7:00,,,,,Maghrib Break — Jamat 6:45 PM - Staff Room
+Class,7:00-8:00,IXG2,M,SK,R2,
+Class,7:00-8:00,IXG1,P,MAI,R3,
+Class,7:00-8:00,G3,M,HK,R4,
+Class,7:00-8:00,XG1,C,SH,R6,
+Class,8:00-9:00,IXG2,M,SK,R2,Extra
+Class,8:00-9:00,IXG1,C,SH,R3,
+Class,8:00-9:00,XG1,P,MAI,R6,
+Break,9:00-9:30,,,,,"Isha Break — Jamat Staff: 8:35, Teacher: 9:05 PM - Terrace Area"
