@@ -208,6 +208,7 @@ body.tv{cursor:none}
 #start{position:fixed;inset:0;z-index:100;background:#fff;color:var(--red);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3vh;font:700 6vh var(--display);text-align:center}
 #start small{font:600 3vh var(--body);color:#555}
 body.started #start{display:none}
+.slide .vid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
 </style>
 </head>
 <body>
@@ -402,6 +403,19 @@ body.started #start{display:none}
     <div id="pubStatus" class="hint"></div>
   </details>
 
+  <details open>
+    <summary>0b. Photo of master plan, toppers video, voice recordings</summary>
+    <p class="hint"><b>Master plan by photo:</b> pick the date, then upload a straight, clear photo or screenshot. With an Anthropic key below, the photo is read automatically into the timetable (highlighting and blurring work). Without a key, the photo itself is shown full screen on that day. Use “Preview” to check, then Publish to TV.</p>
+    <div class="row"><input type="date" id="photoDate"><label class="b primary">Upload master plan photo<input type="file" accept="image/*" id="photoFile" hidden></label><button class="b s" id="btnPreview">Preview this date</button></div>
+    <div class="row"><input id="aiKey" type="password" placeholder="Anthropic API key (optional, for automatic reading)" style="min-width:320px"></div>
+    <div id="photoStatus" class="hint"></div>
+    <p class="hint"><b>Toppers video (about 25 sec, MP4, under 25 MB):</b> plays in the slideshow after the logo slide.</p>
+    <div class="row"><label class="b s">Upload toppers video<input type="file" accept="video/mp4,video/*" id="videoFile" hidden></label><label><input type="checkbox" data-k="videoOn"> Show video in slideshow</label></div>
+    <p class="hint"><b>Voice recordings (best quality):</b> upload one MP3 per prayer and language. Use “default” to cover every prayer.</p>
+    <div class="row"><select id="audSel"><option value="default">default (all prayers)</option><option value="fajr">Fajr</option><option value="zuhr">Zuhr</option><option value="asr">Asr</option><option value="maghrib">Maghrib</option><option value="isha">Isha</option></select><select id="audLang"><option value="en">English</option><option value="ur">Urdu</option></select><label class="b s">Upload MP3<input type="file" accept="audio/*" id="audFile" hidden></label></div>
+    <div id="mediaStatus" class="hint"></div>
+  </details>
+
   <details>
     <summary>7. Backup</summary>
     <p class="hint">Settings live in this browser on this laptop. Export a backup now and then. (Uploaded images and recordings are not part of the backup – keep the original files.)</p>
@@ -544,7 +558,7 @@ const DEFAULTS = {
   ttsText: 'Attention please. It is now time for {prayer} prayer. Please proceed for {prayer} prayer. {note}',
   ttsUr: 'توجہ فرمائیں۔ {prayer} کی نماز کا وقت ہو گیا ہے۔ براہ کرم نماز کے لیے تشریف لے جائیں۔',
   urNames: { Fajr: 'فجر', Zuhr: 'ظہر', Asr: 'عصر', Maghrib: 'مغرب', Isha: 'عشاء' },
-  plans: {},
+  plans: {}, videoOn: false, videoV: 0, audioV: 0,
   voiceName: 'auto', rate: 0.88, pitch: 1,
   audioNames: {}, imageName: '', oneOff: null, fired: {}
 };
@@ -628,7 +642,9 @@ function inkOn(c) {
   const n = parseInt(m[1], 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
   return (0.299 * r + 0.587 * g + 0.114 * b) > 165 ? '#1c1416' : '#fff';
 }
-const PLAN = () => (S.plans || {})[dateStr(new Date())] || null;
+let pvDate = null;
+const PLAN = () => (S.plans || {})[pvDate || dateStr(new Date())] || null;
+const rawUrl = p => `https://raw.githubusercontent.com/${SYNC.owner}/${SYNC.repo}/${SYNC.branch}/${p}`;
 const ROWS = () => { const p = PLAN(); return p && Array.isArray(p.rows) ? p.rows : S.rows; };
 function legendItems() {
   const used = new Map();
@@ -709,7 +725,9 @@ function startPager() {
   pageTimer = setTimeout(() => { pageIdx = (pageIdx + 1) % pages.length; showPage(true); startPager(); }, clamp(S.pageSeconds, 5, 120) * 1000);
 }
 async function renderImage() {
-  const blob = await idbGet('image'), box = $('#imgWrap');
+  const pp = PLAN(), box = $('#imgWrap');
+  if (pp && pp.image && !(pp.rows && pp.rows.length)) { box.innerHTML = `<img src="${rawUrl(pp.image)}?v=${pp.v || 0}" alt="Master plan">`; return; }
+  const blob = await idbGet('image');
   if (imgUrl) { URL.revokeObjectURL(imgUrl); imgUrl = null; }
   if (blob) { imgUrl = URL.createObjectURL(blob); box.innerHTML = `<img src="${imgUrl}" alt="Master plan">`; }
   else box.innerHTML = '<div class="none">No master-plan image uploaded yet (Settings → Display).</div>';
@@ -809,11 +827,12 @@ function renderStage() {
   $('#footNote').innerHTML = n ? `<b>Note:</b> ${esc(n)}` : '';
   $('#legend').innerHTML = legendItems().map(g => `<span class="lg" style="--c:${g.color}"><i></i>${esc(g.label)}</span>`).join('');
   renderPrayerStrip();
-  const m = S.mode;
+  const photo = pl && pl.image && !(pl.rows && pl.rows.length);
+  const m = photo ? 'image' : S.mode;
   $('#tableWrap').style.display = m === 'table' ? 'block' : 'none';
   $('#imgWrap').style.display = m === 'image' ? 'flex' : 'none';
   $('#gridWrap').style.display = m === 'grid' ? 'block' : 'none';
-  if (m === 'image') { $('#pager').textContent = ''; clearTimeout(pageTimer); return; }
+  if (m === 'image') { renderImage(); $('#pager').textContent = ''; clearTimeout(pageTimer); return; }
   if (m === 'grid') { $('#pager').textContent = ''; clearTimeout(pageTimer); renderGrid(); return; }
   buildPages(); showPage(false); startPager();
 }
@@ -857,12 +876,19 @@ const bufCache = {};
 async function loadBuffer(id) {
   if (id in bufCache) return bufCache[id];
   let blob = await idbGet('audio:' + id); let buf = null;
-  if (!blob) { try { const r = await fetch('audio/' + id + '.mp3', { cache: 'no-cache' }); if (r.ok && /audio|octet/.test(r.headers.get('content-type') || '')) blob = await r.blob(); } catch (e) {} }
+  if (!blob) for (const u of [rawUrl('audio/' + id + '.mp3') + '?v=' + (S.audioV || 0), 'audio/' + id + '.mp3']) {
+    try { const r = await fetch(u, { cache: 'no-cache' }); if (r.ok && /audio|octet/.test(r.headers.get('content-type') || '')) { blob = await r.blob(); break; } } catch (e) {}
+  }
   if (blob) {
     try { buf = await getCtx().decodeAudioData(await blob.arrayBuffer()); }
     catch (e) { toast('Could not read the recording for “' + id + '”. Try an MP3 or WAV file.'); }
   }
   bufCache[id] = buf; return buf;
+}
+function prefetchAudio() {
+  Object.keys(bufCache).forEach(k => delete bufCache[k]);
+  const ids = [...new Set([...(S.prayers || []).filter(p => p.enabled).map(p => p.id), 'default'])];
+  ids.forEach(id => ['en', 'ur'].forEach(l => loadBuffer(id + '-' + l).catch(() => {})));
 }
 function playBuffer(buf) {
   return new Promise(res => {
@@ -882,9 +908,13 @@ function localFallback() {
   const en = voices.filter(v => v.localService && /^en/i.test(v.lang));
   return en[0] || voices.find(v => v.localService) || voices[0] || null;
 }
+function bestEn() {
+  const sc = v => (/natural|neural|online/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 3 : 0) + (/en-(GB|US|IN|PK)/i.test(v.lang) ? 1 : 0) + (v.localService ? 0 : 1);
+  return voices.filter(v => /^en/i.test(v.lang)).sort((a, b) => sc(b) - sc(a))[0] || null;
+}
 function pickVoice() {
   if (S.voiceName && S.voiceName !== 'auto') { const v = voices.find(x => x.name === S.voiceName); if (v) return v; }
-  return localFallback();
+  return bestEn() || localFallback();
 }
 const urName = n => (S.urNames || DEFAULTS.urNames)[n] || n;
 function ttsForUr(name) { return (S.ttsUr || DEFAULTS.ttsUr).replace(/\{prayer\}/gi, urName(name)); }
@@ -1003,6 +1033,7 @@ function logoSlideHtml() {
 function buildSlides() {
   const out = [];
   if (S.interLogo) out.push({ html: logoSlideHtml(), sec: S.interLogoSec });
+  if (S.videoOn && S.videoV) out.push({ video: true, sec: 45, html: `<video class="vid" playsinline preload="auto" src="${rawUrl('media/toppers.mp4')}?v=${S.videoV}"></video>` });
   const brand = $('#brand').innerHTML;
   (S.notices || []).filter(n => n.on && ((n.title || '').trim() || (n.text || '').trim())).forEach(n =>
     out.push({ html: `<div class="slbrand brand">${brand}</div><div class="nt"><div class="ntt">${esc(n.title)}</div><div class="ntb">${esc(n.text)}</div></div>`, sec: S.interNoticeSec }));
@@ -1010,7 +1041,7 @@ function buildSlides() {
 }
 function abortInter() {
   if (!interRunning) return;
-  interAbort = true; if (interWake) interWake();
+  interAbort = true; if (interWake) interWake(); $$('#inter video').forEach(v => v.pause());
   $('#inter').classList.remove('vis', 'show');
 }
 async function runInter(force) {
@@ -1029,7 +1060,10 @@ async function runInter(force) {
   for (let i = 0; i < els.length && !interAbort; i++) {
     if (i > 0) els[i - 1].classList.remove('on');
     els[i].classList.add('on');
+    const vd = slides[i].video && els[i].querySelector('video');
+    if (vd) { const wake = () => interWake && interWake(); vd.onended = wake; vd.onerror = wake; vd.currentTime = 0; vd.play().catch(() => { vd.muted = true; vd.play().catch(wake); }); }
     await interSleep(clamp(slides[i].sec, 3, 60) * 1000);
+    if (vd) vd.pause();
   }
   if (!interAbort) {
     els.forEach(e => e.classList.remove('on'));
@@ -1363,7 +1397,7 @@ async function pull() {
     const d = await r.json(); LOCAL_ONLY.forEach(k => delete d[k]);
     const keep = { fired: S.fired, oneOff: S.oneOff, audioNames: S.audioNames, imageName: S.imageName };
     if (JSON.stringify(Object.assign({}, S, keep)) === JSON.stringify(Object.assign({}, S, d, keep))) return true;
-    Object.assign(S, d, keep); S.ver = DEFAULTS.ver; save(); buildSecMap(); renderStage(); renderPrayerStrip(); scheduleInter(); return true;
+    Object.assign(S, d, keep); S.ver = DEFAULTS.ver; save(); buildSecMap(); renderStage(); renderPrayerStrip(); scheduleInter(); prefetchAudio(); return true;
   } catch (e) { return false; }
 }
 async function publish() {
@@ -1406,7 +1440,7 @@ function planFromCSV(text) {
 }
 function renderPlans() {
   const ks = Object.keys(S.plans || {}).sort();
-  $('#planList').innerHTML = ks.length ? 'Scheduled plans: ' + ks.map(k => `${k} (${S.plans[k].rows.length} rows) <button class="b s" data-d="${k}">Remove</button>`).join(' &nbsp; ') : 'No dated master plans uploaded. The normal timetable is used.';
+  $('#planList').innerHTML = ks.length ? 'Scheduled plans: ' + ks.map(k => `${k} (${S.plans[k].rows ? S.plans[k].rows.length + ' classes' : 'photo'}) <button class="b s" data-d="${k}">Remove</button>`).join(' &nbsp; ') : 'No dated master plans uploaded. The normal timetable is used.';
 }
 function wireSync() {
   $('#planDate').value = dateStr(new Date(Date.now() + 864e5));
@@ -1422,18 +1456,81 @@ function wireSync() {
   $('#btnPull').onclick = async () => { toast((await pull()) ? 'Loaded from cloud.' : 'Could not load from cloud.'); refreshAll(); renderPlans(); };
   renderPlans();
 }
+const AI_PROMPT = `This is a photo of a school timetable ("Master Plan"). Columns are rooms (R1, R2 ... and sometimes a "Prayer Room" column); the left column is time. Rows spanning all columns are breaks (Zuhr, Asr, Maghrib, Isha) with Jamat details. Each coloured cell is one class: line 1 = section (like A7, B2, XG2, G1, IXG1, A1+A3), then subject code (B, C, P, M, CS, E, U/I), then teacher initials. If a cell shows its own time (like 2:50-4:20) use that as its Time, otherwise use the row time. Words like Grand Test, Test, Extra, Recovery go in Note. Output ONLY CSV, no explanations, no code fences, in exactly this form:
+#day,MONDAY | 12 OCT
+#note,<the note text at the bottom, or empty>
+Type,Time,Section,Subject,Teacher,Room,Note
+Break,12:40-2:15,,,,,Zuhr Break - Jamat 12:40 PM - Prayer Room
+Class,2:15-3:10,A7,B,ZA,R1,
+One line per class cell and one per break row. Quote any field containing a comma.`;
+const b64OfBlob = b => new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.readAsDataURL(b); });
+function shrink(file, max = 1800) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => { const k = Math.min(1, max / Math.max(i.width, i.height)), c = document.createElement('canvas'); c.width = i.width * k; c.height = i.height * k; c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); c.toBlob(res, 'image/jpeg', 0.88); }; i.onerror = rej; i.src = URL.createObjectURL(file); });
+}
+async function ghPut(path, blob, st) {
+  const tok = $('#ghToken').value.trim();
+  if (!tok || /YOUR-GITHUB/.test(SYNC.owner)) { st.textContent = 'First put your GitHub username in index.html and paste the token in section 0.'; return false; }
+  try { localStorage.setItem('iotaToken', tok); } catch (e) {}
+  const u = `https://api.github.com/repos/${SYNC.owner}/${SYNC.repo}/contents/${path}`, h = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
+  try {
+    st.textContent = 'Uploading… please wait';
+    const g = await fetch(`${u}?ref=${SYNC.branch}`, { headers: h, cache: 'no-store' }), sha = g.ok ? (await g.json()).sha : undefined;
+    const p = await fetch(u, { method: 'PUT', headers: h, body: JSON.stringify({ message: 'Upload ' + path, branch: SYNC.branch, sha, content: await b64OfBlob(blob) }) });
+    if (!p.ok) { st.textContent = 'Upload failed (' + p.status + '). Check the token and that the “data” branch exists.'; return false; }
+    return true;
+  } catch (e) { st.textContent = 'Network error – not uploaded.'; return false; }
+}
+async function readPlanAI(blob, key) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 6000, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: await b64OfBlob(blob) } }, { type: 'text', text: AI_PROMPT }] }] }) });
+  if (!r.ok) throw new Error('AI service error ' + r.status);
+  return ((await r.json()).content || []).map(c => c.text || '').join('').replace(/```[a-z]*/g, '').trim();
+}
+function wireMedia() {
+  $('#photoDate').value = dateStr(new Date(Date.now() + 864e5));
+  try { $('#aiKey').value = localStorage.getItem('iotaAiKey') || ''; } catch (e) {}
+  $('#btnPreview').onclick = () => { pvDate = pvDate ? null : $('#photoDate').value; renderStage(); toast(pvDate ? 'Previewing ' + pvDate + ' on this PC only. Click again to stop.' : 'Preview off.'); };
+  $('#photoFile').onchange = async e => {
+    const f = e.target.files[0], d = $('#photoDate').value, st = $('#photoStatus'), key = $('#aiKey').value.trim(); e.target.value = ''; if (!f || !d) return;
+    try {
+      const img = await shrink(f); S.plans = S.plans || {};
+      if (key) {
+        try { localStorage.setItem('iotaAiKey', key); } catch (e) {}
+        try {
+          st.textContent = 'Reading the photo… about 30 seconds';
+          const p = planFromCSV(await readPlanAI(img, key));
+          if (!p.rows.length) throw new Error('nothing found');
+          S.plans[d] = p; save(); renderPlans(); renderStage();
+          st.textContent = `Read ${p.rows.length} lines for ${d}. Click “Preview this date” to check it, then Publish to TV.`; return;
+        } catch (err) { st.textContent = 'Automatic reading failed (' + err.message + '). Uploading the photo itself instead…'; }
+      }
+      const path = `plans/${d}.jpg`; if (!(await ghPut(path, img, st))) return;
+      S.plans[d] = { image: path, v: Date.now() }; save(); renderPlans(); renderStage();
+      st.textContent = 'Photo uploaded for ' + d + '. Click Publish to TV.';
+    } catch (err) { st.textContent = 'Could not use that photo.'; }
+  };
+  $('#videoFile').onchange = async e => {
+    const f = e.target.files[0], st = $('#mediaStatus'); e.target.value = ''; if (!f) return;
+    if (f.size > 25e6) { st.textContent = 'Video is over 25 MB. Please make it smaller first.'; return; }
+    if (await ghPut('media/toppers.mp4', f, st)) { S.videoV = Date.now(); S.videoOn = true; save(); syncInputs(); st.textContent = 'Video uploaded. Click Publish to TV.'; }
+  };
+  $('#audFile').onchange = async e => {
+    const f = e.target.files[0], st = $('#mediaStatus'), id = $('#audSel').value, lg = $('#audLang').value; e.target.value = ''; if (!f) return;
+    if (await ghPut(`audio/${id}-${lg}.mp3`, f, st)) { S.audioV = Date.now(); save(); st.textContent = `Uploaded ${id}-${lg}. Click Publish to TV.`; }
+  };
+}
 function goFull() { const e = document.documentElement; (e.requestFullscreen || e.webkitRequestFullscreen || (() => Promise.reject())).call(e).catch(() => {}); }
 function startTV() { goFull(); enableAudio(true); requestWake(); document.body.classList.add('started'); }
 
 /* ================= start ================= */
 const hadSaved = load();
 buildSecMap();
-initBindings(); wireUI(); wireSync(); refreshAll();
+initBindings(); wireUI(); wireSync(); wireMedia(); refreshAll();
 if (ADMIN) document.body.classList.add('started');
 else {
   document.body.classList.add('tv');
   ['keydown', 'click', 'pointerdown'].forEach(ev => addEventListener(ev, () => { if (!document.body.classList.contains('started')) startTV(); else if (!document.fullscreenElement) goFull(); }));
-  goFull(); pull(); setInterval(pull, 120000);
+  goFull(); pull().then(prefetchAudio); setInterval(pull, 120000);
 }
 renderLogo(); renderImage(); requestWake();
 tick(); setInterval(tick, 1000); scheduleInter();
