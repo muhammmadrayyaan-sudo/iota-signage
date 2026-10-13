@@ -443,10 +443,10 @@ body.started #start{display:none}
 
 <script>
 /* ============================================================
-   ONE-TIME SETTING: change YOUR-GITHUB-USERNAME below to your
+   ONE-TIME SETTING: change thomashaden66 below to your
    real GitHub username (keep the quotes). Nothing else here.
    ============================================================ */
-const SYNC = { owner: 'YOUR-GITHUB-USERNAME', repo: 'iota-signage', branch: 'data', file: 'signage-data.json' };
+const SYNC = { owner: 'thomashaden66', repo: 'iota-signage', branch: 'data', file: 'signage-data.json' };
 (() => {
 'use strict';
 
@@ -1368,7 +1368,7 @@ async function pull() {
 }
 async function publish() {
   const st = $('#pubStatus'), tok = $('#ghToken').value.trim();
-  if (/YOUR-GITHUB/.test(SYNC.owner)) { st.textContent = 'Open index.html in GitHub and replace YOUR-GITHUB-USERNAME with your real username first.'; return; }
+  if (/YOUR-GITHUB/.test(SYNC.owner)) { st.textContent = 'Open index.html in GitHub and replace thomashaden66 with your real username first.'; return; }
   if (!tok) { st.textContent = 'Paste the GitHub token first.'; return; }
   try { localStorage.setItem('iotaToken', tok); } catch (e) {}
   const today = dateStr(new Date()); Object.keys(S.plans || {}).forEach(k => { if (k < today) delete S.plans[k]; });
