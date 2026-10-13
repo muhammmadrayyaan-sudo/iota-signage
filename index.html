@@ -409,8 +409,9 @@ body.started #start{display:none}
     <div class="row"><input type="date" id="photoDate"><label class="b primary">Upload master plan photo<input type="file" accept="image/*" id="photoFile" hidden></label><button class="b s" id="btnPreview">Preview this date</button></div>
     <div class="row"><input id="aiKey" type="password" placeholder="Anthropic API key (optional, for automatic reading)" style="min-width:320px"></div>
     <div id="photoStatus" class="hint"></div>
-    <p class="hint"><b>Toppers video (about 25 sec, MP4, under 25 MB):</b> plays in the slideshow after the logo slide.</p>
-    <div class="row"><label class="b s">Upload toppers video<input type="file" accept="video/mp4,video/*" id="videoFile" hidden></label><label><input type="checkbox" data-k="videoOn"> Show video in slideshow</label></div>
+    <p class="hint"><b>Videos (MP4, each under 25 MB):</b> every ticked video plays in the slideshow after the logo slide, in the order shown. Each upload is added as a new video, nothing is overwritten. Remove the ones you don't want, then click Publish to TV.</p>
+    <div class="row"><label class="b primary">+ Add a video<input type="file" accept="video/mp4,video/*" id="videoFile" hidden></label><label><input type="checkbox" data-k="videoOn"> Play videos in the slideshow</label></div>
+    <div id="videoList"></div>
     <p class="hint"><b>Voice recordings (best quality):</b> upload one MP3 per prayer and language. Use “default” to cover every prayer.</p>
     <div class="row"><select id="audSel"><option value="default">default (all prayers)</option><option value="fajr">Fajr</option><option value="zuhr">Zuhr</option><option value="asr">Asr</option><option value="maghrib">Maghrib</option><option value="isha">Isha</option></select><select id="audLang"><option value="en">English</option><option value="ur">Urdu</option></select><label class="b s">Upload MP3<input type="file" accept="audio/*" id="audFile" hidden></label></div>
     <div id="mediaStatus" class="hint"></div>
@@ -558,7 +559,7 @@ const DEFAULTS = {
   ttsText: 'Attention please. It is now time for {prayer} prayer. Please proceed for {prayer} prayer. {note}',
   ttsUr: 'توجہ فرمائیں۔ {prayer} کی نماز کا وقت ہو گیا ہے۔ براہ کرم نماز کے لیے تشریف لے جائیں۔',
   urNames: { Fajr: 'فجر', Zuhr: 'ظہر', Asr: 'عصر', Maghrib: 'مغرب', Isha: 'عشاء' },
-  plans: {}, videoOn: false, videoV: 0, audioV: 0,
+  plans: {}, videoOn: false, videoV: 0, videos: [], audioV: 0,
   voiceName: 'auto', rate: 0.88, pitch: 1,
   audioNames: {}, imageName: '', oneOff: null, fired: {}
 };
@@ -1033,7 +1034,7 @@ function logoSlideHtml() {
 function buildSlides() {
   const out = [];
   if (S.interLogo) out.push({ html: logoSlideHtml(), sec: S.interLogoSec });
-  if (S.videoOn && S.videoV) out.push({ video: true, sec: 45, html: `<video class="vid" playsinline preload="auto" src="${rawUrl('media/toppers.mp4')}?v=${S.videoV}"></video>` });
+  if (S.videoOn) (S.videos || []).filter(v => v.on).forEach(v => out.push({ video: true, sec: 45, html: `<video class="vid" playsinline preload="auto" src="${rawUrl(v.file)}?v=${v.v || 0}"></video>` }));
   const brand = $('#brand').innerHTML;
   (S.notices || []).filter(n => n.on && ((n.title || '').trim() || (n.text || '').trim())).forEach(n =>
     out.push({ html: `<div class="slbrand brand">${brand}</div><div class="nt"><div class="ntt">${esc(n.title)}</div><div class="ntb">${esc(n.text)}</div></div>`, sec: S.interNoticeSec }));
@@ -1453,7 +1454,7 @@ function wireSync() {
   $('#planList').onclick = e => { const d = e.target.dataset.d; if (d) { delete S.plans[d]; save(); renderPlans(); renderStage(); } };
   try { $('#ghToken').value = localStorage.getItem('iotaToken') || ''; } catch (e) {}
   $('#btnPublish').onclick = publish;
-  $('#btnPull').onclick = async () => { toast((await pull()) ? 'Loaded from cloud.' : 'Could not load from cloud.'); refreshAll(); renderPlans(); };
+  $('#btnPull').onclick = async () => { toast((await pull()) ? 'Loaded from cloud.' : 'Could not load from cloud.'); refreshAll(); renderPlans(); renderVideos(); };
   renderPlans();
 }
 const AI_PROMPT = `This is a photo of a school timetable ("Master Plan"). Columns are rooms (R1, R2 ... and sometimes a "Prayer Room" column); the left column is time. Rows spanning all columns are breaks (Zuhr, Asr, Maghrib, Isha) with Jamat details. Each coloured cell is one class: line 1 = section (like A7, B2, XG2, G1, IXG1, A1+A3), then subject code (B, C, P, M, CS, E, U/I), then teacher initials. If a cell shows its own time (like 2:50-4:20) use that as its Time, otherwise use the row time. Words like Grand Test, Test, Extra, Recovery go in Note. Output ONLY CSV, no explanations, no code fences, in exactly this form:
@@ -1479,6 +1480,19 @@ async function ghPut(path, blob, st) {
     if (!p.ok) { st.textContent = 'Upload failed (' + p.status + '). Check the token and that the “data” branch exists.'; return false; }
     return true;
   } catch (e) { st.textContent = 'Network error – not uploaded.'; return false; }
+}
+async function ghDelete(path) {
+  const tok = $('#ghToken').value.trim(); if (!tok || /YOUR-GITHUB/.test(SYNC.owner)) return false;
+  const u = `https://api.github.com/repos/${SYNC.owner}/${SYNC.repo}/contents/${path}`, h = { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json' };
+  try {
+    const g = await fetch(`${u}?ref=${SYNC.branch}`, { headers: h, cache: 'no-store' }); if (!g.ok) return false;
+    const d = await fetch(u, { method: 'DELETE', headers: h, body: JSON.stringify({ message: 'Remove ' + path, branch: SYNC.branch, sha: (await g.json()).sha }) });
+    return d.ok;
+  } catch (e) { return false; }
+}
+function renderVideos() {
+  const L = S.videos || [];
+  $('#videoList').innerHTML = L.length ? L.map((v, i) => `<div class="row"><label><input type="checkbox" data-vi="${i}" data-a="on" ${v.on ? 'checked' : ''}> <input data-vi="${i}" data-a="name" value="${esc(v.name)}" style="min-width:200px"></label><button class="b s" data-vi="${i}" data-a="up">↑</button><button class="b s" data-vi="${i}" data-a="down">↓</button><button class="b s" data-vi="${i}" data-a="rm">Remove</button></div>`).join('') : '<p class="hint">No videos yet.</p>';
 }
 async function readPlanAI(blob, key) {
   const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
@@ -1509,11 +1523,26 @@ function wireMedia() {
       st.textContent = 'Photo uploaded for ' + d + '. Click Publish to TV.';
     } catch (err) { st.textContent = 'Could not use that photo.'; }
   };
+  if (S.videoV && !(S.videos || []).length) { S.videos = [{ id: 'legacy', name: 'Toppers video', file: 'media/toppers.mp4', on: true, v: S.videoV }]; save(); }
   $('#videoFile').onchange = async e => {
     const f = e.target.files[0], st = $('#mediaStatus'); e.target.value = ''; if (!f) return;
-    if (f.size > 25e6) { st.textContent = 'Video is over 25 MB. Please make it smaller first.'; return; }
-    if (await ghPut('media/toppers.mp4', f, st)) { S.videoV = Date.now(); S.videoOn = true; save(); syncInputs(); st.textContent = 'Video uploaded. Click Publish to TV.'; }
+    if (f.size > 25e6) { st.textContent = 'That video is over 25 MB. Please make it smaller first.'; return; }
+    const id = 'v' + Date.now(), file = `media/${id}.mp4`;
+    if (await ghPut(file, f, st)) { S.videos = S.videos || []; S.videos.push({ id, name: f.name.replace(/\.[^.]+$/, ''), file, on: true, v: Date.now() }); S.videoOn = true; save(); syncInputs(); renderVideos(); st.textContent = 'Video added. Click Publish to TV.'; }
   };
+  $('#videoList').onclick = async e => {
+    const i = +e.target.dataset.vi, a = e.target.dataset.a, L = S.videos || []; if (isNaN(i) || !L[i]) return;
+    if (a === 'up' && i > 0) [L[i - 1], L[i]] = [L[i], L[i - 1]];
+    else if (a === 'down' && i < L.length - 1) [L[i + 1], L[i]] = [L[i], L[i + 1]];
+    else if (a === 'rm') {
+      if (!confirm('Remove “' + L[i].name + '”?')) return;
+      const v = L.splice(i, 1)[0]; save(); renderVideos(); const st = $('#mediaStatus');
+      const ok = await ghDelete(v.file); st.textContent = ok ? 'Removed. Click Publish to TV.' : 'Removed from the list. Click Publish to TV. (The file stayed on GitHub, which is harmless.)'; return;
+    } else return;
+    save(); renderVideos();
+  };
+  $('#videoList').onchange = e => { const i = +e.target.dataset.vi, a = e.target.dataset.a, v = (S.videos || [])[i]; if (!v) return; if (a === 'on') v.on = e.target.checked; if (a === 'name') v.name = e.target.value; save(); };
+  renderVideos();
   $('#audFile').onchange = async e => {
     const f = e.target.files[0], st = $('#mediaStatus'), id = $('#audSel').value, lg = $('#audLang').value; e.target.value = ''; if (!f) return;
     if (await ghPut(`audio/${id}-${lg}.mp3`, f, st)) { S.audioV = Date.now(); save(); st.textContent = `Uploaded ${id}-${lg}. Click Publish to TV.`; }
