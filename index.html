@@ -537,8 +537,8 @@ const DEFAULTS = {
   footerNote: '',
   mode: 'grid', scale: 1, rowsPerPage: 12, pageSeconds: 12, autoPage: true,
   rows: [],
-  subjects: { M: 'Mathematics', P: 'Physics', C: 'Chemistry', B: 'Biology', E: 'English', CS: 'Computer Science', 'U/I': 'Urdu / Islamiyat', PST: 'Pakistan Studies', 'U/PST': 'Urdu / Pakistan Studies' },
-  teachers: { ZA: 'Zuhair Ahmed', HZ: 'Hassan Raza', ZD: 'M Zaid', ZK: 'Zakiuddin Siddique', ZAB: 'Zain ul Abideen Baig', MAI: 'Muhammad Anas Iqbal', HM: 'Hammad', FS: 'Fazal Shahbaz', AR: 'Abbas Raza', HK: 'Hamza Khan', SK: 'Salman Kausar', CH: 'Shahid Munawar', AM: 'Adeel Mahmood', HB: 'Haris Basim', MR: 'Muhammad Raheel' },
+  subjects: { M: 'Mathematics', P: 'Physics', C: 'Chemistry', B: 'Biology', E: 'English', CS: 'Computer Science', 'U/I': 'Urdu / Islamiyat', PST: 'Pakistan Studies', 'U/PST': 'Urdu / Pakistan Studies', 'U/P': 'Urdu / Pakistan Studies' },
+  teachers: { ZA: 'Zuhair Ahmed', HZ: 'Hassan Raza', ZD: 'M Zaid', ZK: 'Zaki Uddin Siddique', ZAB: 'Zain ul Abideen Baig', MAI: 'Muhammad Anas Iqbal', HM: 'Hammad', FS: 'Fazal Shahbaz', AR: 'Abbas Raza', HK: 'Hamza Khan', SK: 'Salman Kausar', CH: 'Shahid Munawar', AM: 'Adil Mahmood', HB: 'M. Haris Basim', MR: 'M. Raheel', AA: 'Ahtesham Ali', MS: 'Mohsin Sarfaraz', WA: 'Waqas Ahmed', JS: 'M. Jawed Shaikh', AI: 'Asif Iqbal', SH: 'Shahid Munawar' },
   classColors: {},
   ver: 5,
   groups: [
@@ -558,7 +558,7 @@ const DEFAULTS = {
     { id: 'maghrib', name: 'Maghrib', time: '18:45', enabled: true,  note: 'Jamat 6:45 PM – Staff Room' },
     { id: 'isha',    name: 'Isha',    time: '20:35', enabled: true,  note: 'Jamat: Staff 8:35 PM, Teacher 9:05 PM – Terrace Area' }
   ],
-  repeats: 4, gap: 3, minDisplay: 30, volume: 1, boost: 2, chime: true, blink: 'normal',
+  repeats: 5, gap: 3, minDisplay: 60, volume: 1, boost: 2, chime: true, blink: 'normal',
   interOn: true, interBar: true, interEvery: 120, interLogo: true, interLogoSec: 7, interNoticeSec: 9,
   notices: [
     { on: true, title: 'Fee Reminder', text: 'Monthly fee vouchers are due by the 10th of every month.' },
@@ -629,7 +629,7 @@ const fmtRange = t => String(t || '').replace(/\s*[-–—]\s*/, ' – ');
 /* ================= class groups (class + boys/girls) ================= */
 let colorsDirty = false;
 let secMap = {};
-function ensureNames() { if (S.namesVer !== 3) { S.subjects = Object.assign({}, S.subjects || {}, DEFAULTS.subjects); S.teachers = Object.assign({}, S.teachers || {}, DEFAULTS.teachers); S.namesVer = 3; save(); } else { S.subjects = Object.assign({}, DEFAULTS.subjects, S.subjects || {}); S.teachers = Object.assign({}, DEFAULTS.teachers, S.teachers || {}); } }
+function ensureNames() { if (S.namesVer !== 4) { S.subjects = Object.assign({}, S.subjects || {}, DEFAULTS.subjects); S.teachers = Object.assign({}, S.teachers || {}, DEFAULTS.teachers); S.namesVer = 4; save(); } else { S.subjects = Object.assign({}, DEFAULTS.subjects, S.subjects || {}); S.teachers = Object.assign({}, DEFAULTS.teachers, S.teachers || {}); } }
 function buildSecMap() {
   ensureNames();
   if (S.cleanV !== 2) { S.cleanV = 2; S.rows = []; S.dayLabel = ''; S.footerNote = ''; save(); }
@@ -986,7 +986,7 @@ function hideOverlay() {
 }
 async function runAnnouncement(ev) {
   ann = { cancelled: false, wake: null };
-  const started = Date.now(), n = 1;
+  const started = Date.now(), n = clamp(S.repeats, 1, 5);
   showOverlay(ev);
   for (let i = 1; i <= n; i++) {
     if (ann.cancelled) break;
