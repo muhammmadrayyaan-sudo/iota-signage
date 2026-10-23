@@ -957,7 +957,7 @@ async function loadBuffer(id) {
   if (id in bufCache) return bufCache[id];
   let blob = await idbGet('audio:' + id); let buf = null;
   if (!blob) for (const u of [rawUrl('audio/' + id + '.mp3') + '?v=' + (S.audioV || 0), 'audio/' + id + '.mp3']) {
-    try { const r = await fetch(u, { cache: 'no-cache' }); if (r.ok && /audio|octet/.test(r.headers.get('content-type') || '')) { blob = await r.blob(); break; } } catch (e) {}
+    try { const ac = new AbortController(), ft = setTimeout(() => ac.abort(), 15000); const r = await fetch(u, { cache: 'no-cache', signal: ac.signal }); clearTimeout(ft); if (r.ok && /audio|octet/.test(r.headers.get('content-type') || '')) { blob = await r.blob(); break; } } catch (e) {}
   }
   if (!blob && EMBED_AZAN[id]) { try { blob = await (await fetch(azanUri(id))).blob(); } catch (e) {} }
   if (blob) {
@@ -978,9 +978,13 @@ function playBuffer(buf) {
     src.buffer = buf; g.gain.value = S.volume * S.boost;
     comp.threshold.value = -10; comp.knee.value = 12; comp.ratio.value = 10; comp.attack.value = 0.003; comp.release.value = 0.2;
     src.connect(g); g.connect(comp); comp.connect(c.destination);
-    current = { stop() { try { src.stop(); } catch (e) {} } };
-    src.onended = () => { current = null; res(); };
-    src.start();
+    let done = false;
+    const fin = () => { if (done) return; done = true; clearTimeout(guard); current = null; res(); };
+    const guard = setTimeout(fin, (buf.duration || 0) * 1000 + 5000); // safety: never wait past the clip's own length
+    current = { stop() { try { src.stop(); } catch (e) {} fin(); } };
+    src.onended = fin;
+    if (c.state !== 'running') { fin(); return; }
+    try { src.start(); } catch (e) { fin(); }
   });
 }
 
@@ -1032,7 +1036,9 @@ function loadVoices() {
 }
 
 /* ================= announcements ================= */
-const queue = []; let busy = false, ann = null;
+const queue = []; let busy = false, ann = null, annSince = 0;
+const MAX_AUDIO = 7 * 60 * 1000;           // longest an azan/jamat audio may run
+const MAX_OVERLAY = 12 * 60 * 1000;        // the red prayer screen never stays longer than this
 const BLINKS = ['blink-slow', 'blink-normal', 'blink-fast'];
 function enqueue(ev) { queue.push(ev); if (!busy) processQueue(); }
 async function processQueue() {
@@ -1060,13 +1066,14 @@ function hideOverlay() {
 }
 async function runAnnouncement(ev) {
   ann = { cancelled: false, wake: null };
-  const started = Date.now(), n = 1;
+  const started = Date.now(), n = 1; annSince = started;
   showOverlay(ev);
   for (let i = 1; i <= n; i++) {
     if (ann.cancelled) break;
     $('#pCount').textContent = '';
     if (ann.cancelled) break;
-    await announceOnce(ev);
+    const capped = await Promise.race([announceOnce(ev).then(() => false), new Promise(r => setTimeout(() => r(true), MAX_AUDIO))]);
+    if (capped) { console.warn('Announcement audio took too long, stopping it:', ev.name); ann.cancelled = true; if (current) current.stop(); try { speechSynthesis.cancel(); } catch (e) {} }
     if (ann.cancelled) break;
     if (i < n) await sleepCancelable(clamp(S.gap, 1, 15) * 1000);
   }
@@ -1249,13 +1256,23 @@ function updateNext(now) {
   }
   $('#next').textContent = txt;
 }
+function prayerWatchdog() { // closes a prayer screen that got stuck (e.g. the TV paused audio)
+  const o = $('#prayer'); if (!o.classList.contains('show')) return;
+  if (!busy) { o.classList.remove('vis', 'show', ...BLINKS); return; }
+  if (annSince && Date.now() - annSince > MAX_OVERLAY) {
+    console.warn('Prayer screen stuck, closing it');
+    stopAnnouncement(); ann = null; busy = false; annSince = 0;
+    document.body.classList.remove('announcing');
+    o.classList.remove('vis', 'show', ...BLINKS);
+  }
+}
 function tickOverlayClock() { $('#pClock').textContent = 'Current Time – ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
 let lastMin = -1, dayKey = dateStr(new Date());
 function tick() {
   const now = new Date();
   $('#clock').textContent = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   $('#date').textContent = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  tickOverlayClock(); updateNext(now); updateChip(); checkEvents(now);
+  tickOverlayClock(); updateNext(now); updateChip(); prayerWatchdog(); checkEvents(now);
   if (dateStr(now) !== dayKey) { dayKey = dateStr(now); renderStage(); renderPlans(); }
   if (now.getMinutes() !== lastMin) { lastMin = now.getMinutes(); renderPrayerStrip(now); if (S.mode === 'table') showPage(false); else if (S.mode === 'grid') renderGrid(); }
 }
