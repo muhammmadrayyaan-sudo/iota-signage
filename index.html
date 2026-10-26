@@ -970,7 +970,6 @@ function prefetchAudio() {
   Object.keys(bufCache).forEach(k => delete bufCache[k]);
   const ids = [...new Set([...(S.prayers || []).filter(p => p.enabled).map(p => p.id), 'default'])];
   ids.forEach(id => ['en', 'ur'].forEach(l => loadBuffer(id + '-' + l).catch(() => {})));
-  ['azan', 'azan-fajr'].forEach(id => loadBuffer(id).catch(() => {}));
 }
 function playBuffer(buf) {
   return new Promise(res => {
@@ -1032,7 +1031,9 @@ function loadVoices() {
 }
 
 /* ================= announcements ================= */
-const queue = []; let busy = false, ann = null;
+const queue = []; let busy = false, ann = null, annSince = 0;
+const MAX_AUDIO = 7 * 60 * 1000;           // longest an azan/jamat audio may run
+const MAX_OVERLAY = 12 * 60 * 1000;        // the prayer screen never stays longer than this
 const BLINKS = ['blink-slow', 'blink-normal', 'blink-fast'];
 function enqueue(ev) { queue.push(ev); if (!busy) processQueue(); }
 async function processQueue() {
@@ -1060,13 +1061,14 @@ function hideOverlay() {
 }
 async function runAnnouncement(ev) {
   ann = { cancelled: false, wake: null };
-  const started = Date.now(), n = 1;
+  const started = Date.now(), n = 1; annSince = started;
   showOverlay(ev);
   for (let i = 1; i <= n; i++) {
     if (ann.cancelled) break;
     $('#pCount').textContent = '';
     if (ann.cancelled) break;
-    await announceOnce(ev);
+    const capped = await Promise.race([announceOnce(ev).then(() => false), new Promise(r => setTimeout(() => r(true), MAX_AUDIO))]);
+    if (capped) { ann.cancelled = true; if (current) current.stop(); try { speechSynthesis.cancel(); } catch (e) {} }
     if (ann.cancelled) break;
     if (i < n) await sleepCancelable(clamp(S.gap, 1, 15) * 1000);
   }
@@ -1114,8 +1116,7 @@ async function announceOnce(ev) {
   const c = getCtx();
   if (c.state !== 'running') { try { await Promise.race([c.resume(), new Promise(r => setTimeout(r, 400))]); } catch (e) {} }
   $('#pWarn').textContent = '';
-  if (c.state === 'running') { const ab = (await loadBuffer('azan-' + ev.audioId)) || (await loadBuffer('azan')); if (ab) { await playBuffer(ab); return; } }
-  await azanFallback(ev);
+  await azanFallback(ev); // streamed, not decoded into memory (keeps low-memory TVs stable)
 }
 function stopAnnouncement() {
   queue.length = 0;
@@ -1249,13 +1250,31 @@ function updateNext(now) {
   }
   $('#next').textContent = txt;
 }
+function prayerWatchdog() { // closes a prayer screen that got stuck
+  const o = $('#prayer'); if (!o.classList.contains('show')) return;
+  if (!busy) { o.classList.remove('vis', 'show', ...BLINKS); return; }
+  if (annSince && Date.now() - annSince > MAX_OVERLAY) {
+    stopAnnouncement(); ann = null; busy = false; annSince = 0;
+    document.body.classList.remove('announcing');
+    o.classList.remove('vis', 'show', ...BLINKS);
+  }
+}
+const PAGE_START = Date.now(), REFRESH_EVERY = 45 * 60 * 1000;
+function autoReload() { // reload without bringing back the 'Press OK' start screen
+  try { sessionStorage.setItem('iwAutoStart', '1'); } catch (e) {}
+  location.reload();
+}
+function autoRefresh() { // reloads the page every 45 min while idle, so the TV browser never runs out of memory
+  if (ADMIN) return;
+  if (Date.now() - PAGE_START > REFRESH_EVERY && !busy && !ann && !interRunning && !queue.length) autoReload();
+}
 function tickOverlayClock() { $('#pClock').textContent = 'Current Time – ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
 let lastMin = -1, dayKey = dateStr(new Date());
 function tick() {
   const now = new Date();
   $('#clock').textContent = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   $('#date').textContent = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  tickOverlayClock(); updateNext(now); updateChip(); checkEvents(now);
+  tickOverlayClock(); updateNext(now); updateChip(); prayerWatchdog(); checkEvents(now); autoRefresh();
   if (dateStr(now) !== dayKey) { dayKey = dateStr(now); renderStage(); renderPlans(); }
   if (now.getMinutes() !== lastMin) { lastMin = now.getMinutes(); renderPrayerStrip(now); if (S.mode === 'table') showPage(false); else if (S.mode === 'grid') renderGrid(); }
 }
@@ -1815,6 +1834,9 @@ calcOffice();
 buildSecMap();
 initBindings(); wireUI(); wireSync(); wireMedia(); refreshAll();
 if (/[?&]diag\b/.test(location.search)) runDiag();
+{ let auto = false; try { auto = sessionStorage.getItem('iwAutoStart') === '1'; sessionStorage.removeItem('iwAutoStart'); } catch (e) {}
+  if (auto && !ADMIN) { document.body.classList.add('started'); enableAudio(true); requestWake(); } }
+['keydown', 'click', 'touchstart'].forEach(t => document.addEventListener(t, () => { try { enableAudio(true); } catch (e) {} }, { once: true }));
 if (ADMIN) {
   document.body.classList.add('started');
   if (!hadSaved) pull().then(() => { refreshAll(); renderPlans(); renderVideos(); });
@@ -1826,7 +1848,7 @@ else {
   const syncAll = async () => { await pull(); await pullStair(); };
   goFull(); syncAll().then(prefetchAudio); setInterval(syncAll, 90000);
   let verSig = null;
-  const checkVersion = async () => { try { const r = await fetch(location.pathname + '?_=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return; const sig = (r.headers.get('etag') || r.headers.get('last-modified') || '') + '|' + (r.headers.get('content-length') || ''); if (verSig === null) verSig = sig; else if (sig !== verSig && !busy && !ann && !interRunning) location.reload(); } catch (e) {} };
+  const checkVersion = async () => { try { const r = await fetch(location.pathname + '?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' }); if (!r.ok) return; const sig = (r.headers.get('etag') || r.headers.get('last-modified') || '') + '|' + (r.headers.get('content-length') || ''); if (verSig === null) verSig = sig; else if (sig !== verSig && !busy && !ann && !interRunning) autoReload(); } catch (e) {} };
   checkVersion(); setInterval(checkVersion, 300000);
 }
 renderLogo(); renderImage(); requestWake();
