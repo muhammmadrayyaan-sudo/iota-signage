@@ -967,6 +967,7 @@ async function loadBuffer(id) {
   bufCache[id] = buf; return buf;
 }
 function prefetchAudio() {
+  return; // audio switched off: nothing is loaded
   Object.keys(bufCache).forEach(k => delete bufCache[k]);
   const ids = [...new Set([...(S.prayers || []).filter(p => p.enabled).map(p => p.id), 'default'])];
   ids.forEach(id => ['en', 'ur'].forEach(l => loadBuffer(id + '-' + l).catch(() => {})));
@@ -1040,7 +1041,7 @@ const queue = []; let busy = false, ann = null, annSince = 0;
 const MAX_AUDIO = 7 * 60 * 1000;           // longest an azan/jamat audio may run
 const MAX_OVERLAY = 12 * 60 * 1000;        // the red prayer screen never stays longer than this
 const BLINKS = ['blink-slow', 'blink-normal', 'blink-fast'];
-function enqueue(ev) { queue.push(ev); if (!busy) processQueue(); }
+function enqueue(ev) { return; } // prayer announcements, azan and audio switched off
 async function processQueue() {
   busy = true; document.body.classList.add('announcing');
   while (queue.length) { try { await runAnnouncement(queue.shift()); } catch (e) { console.error(e); hideOverlay(); } }
