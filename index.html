@@ -1832,16 +1832,26 @@ else {
   checkVersion(); setInterval(checkVersion, 300000);
 }
 renderLogo(); renderImage(); requestWake();
-/* keep the TV awake: Android TVs stay on only while a real video is playing (it worked this way with the Toppers video, 13-16 Oct) */
+/* keep the TV awake. TV browsers only hold the screen on for a video that is playing, visible, large and NOT muted
+   (a muted or tiny video is ignored - that is why the small logo video did not work). The Toppers video (13-16 Oct)
+   met all of these, which is why the TV never slept that week. This plays a full-screen silent video behind the page,
+   unmuted at volume 1 with a silent audio track, so nothing is seen or heard. */
 if (!ADMIN) {
   const kv = document.createElement('video');
-  kv.src = 'keepawake.mp4'; kv.muted = true; kv.loop = true; kv.autoplay = true; kv.preload = 'auto';
-  kv.setAttribute('muted', ''); kv.setAttribute('playsinline', ''); kv.setAttribute('webkit-playsinline', '');
-  kv.style.cssText = 'position:fixed;left:1.2vh;bottom:1.2vh;height:5vh;width:auto;border-radius:6px;z-index:50;pointer-events:none;background:#fff';
+  kv.src = 'keepawake.mp4'; kv.loop = true; kv.autoplay = true; kv.preload = 'auto'; kv.volume = 1;
+  kv.setAttribute('playsinline', ''); kv.setAttribute('webkit-playsinline', '');
+  kv.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:-1;pointer-events:none';
   document.body.appendChild(kv);
-  const kick = () => { if (kv.paused) kv.play().catch(() => {}); };
-  kick(); kv.addEventListener('pause', kick); kv.addEventListener('ended', kick); setInterval(kick, 10000);
-  ['keydown', 'click', 'pointerdown'].forEach(ev => addEventListener(ev, kick));
+  let wantSound = false, soundFailed = false;
+  const play = () => {
+    kv.muted = !(wantSound && !soundFailed); kv.volume = 1; // the audio track is silence, so nothing is heard
+    const p = kv.play();
+    if (p) p.catch(() => { if (!kv.muted) { soundFailed = true; kv.muted = true; kv.play().catch(() => {}); } });
+  };
+  play();
+  kv.addEventListener('pause', () => { if (!kv.muted) soundFailed = true; setTimeout(play, 1000); }); // browser refused sound: keep it running muted
+  setInterval(() => { if (kv.paused) play(); }, 10000);
+  ['keydown', 'click', 'pointerdown'].forEach(ev => addEventListener(ev, () => { wantSound = true; soundFailed = false; play(); }));
 }
 tick(); setInterval(tick, 1000); scheduleInter();
 if (ADMIN) toast(hadSaved ? 'Welcome back. Click “Enable audio” once so announcements can play.' : 'Demo loaded with sample data. Click “Enable audio”, then open Settings to set prayer times.');
